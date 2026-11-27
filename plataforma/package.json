@@ -1,0 +1,48 @@
+{
+  "name": "agenda-plataforma",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 5173",
+    "build": "next build --webpack",
+    "start": "next start --hostname 127.0.0.1 --port 5173",
+    "db:migrate": "node scripts/db.mjs migrate",
+    "db:seed": "node scripts/db.mjs seed",
+    "db:bootstrap": "node scripts/bootstrap.mjs",
+    "db:local": "node scripts/local-db.mjs",
+    "test": "npm run build:api && node --test tests/*.test.mjs",
+    "build:api": "tsc -p backend/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "@types/react": "^19.3.3",
+    "@types/react-dom": "^19.3.0",
+    "embedded-postgres": "^19.0.0-beta.20",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2"
+  },
+  "workspaces": [
+    "backend"
+  ],
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
+    "@neondatabase/serverless": "^1.2.1",
+    "@tailwindcss/postcss": "^4.3.5",
+    "browser-image-compression": "^2.0.2",
+    "googleapis": "^190.0.0",
+    "jose": "^6.2.18",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
+    "lucide-react": "^1.81.0",
+    "next": "^16.4.6",
+    "postcss": "^8.5.33",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.11.1",
+    "xlsx": "^0.18.5"
+  }
+}

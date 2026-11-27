@@ -1,0 +1,50 @@
+import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import { imageInput,upload } from '../controllers/media.js';
+import { requireFeature } from '../middlewares/feature.middleware.js';
+import { pool } from '../config/database.js';
+import { requireAuth,requireRole,requireTenant } from '../middlewares/auth.middleware.js';
+import { HttpError } from '../middlewares/error.middleware.js';
+import { authRoutes } from './auth.routes.js';
+import { settingsRoutes } from './settings.routes.js';
+import { servicesRoutes } from './services.routes.js';
+import { productsRoutes } from './products.routes.js';
+import { orderRoutes } from './cart-orders.routes.js';
+import { professionalRoutes } from './professionals.routes.js';
+import { appointmentRoutes } from './appointments.routes.js';
+import { loyaltyRoutes } from './loyalty.routes.js';
+import { clientRoutes } from './clients.routes.js';
+import { reportRoutes } from './reports.routes.js';
+
+export const api=Router();
+const customer=Router({mergeParams:true});
+const business=Router({mergeParams:true});
+const staff=Router({mergeParams:true});
+const admin=Router();
+customer.use(requireAuth,requireRole('CLIENT'),requireTenant);
+business.use(requireAuth,requireRole('OWNER'),requireTenant);
+staff.use(requireAuth,requireRole('STAFF'),requireTenant);
+admin.use(requireAuth,requireRole('SUPER_ADMIN'));
+
+api.get('/health',async(_request,response)=>{
+  await pool.query('SELECT 1 FROM platform_settings WHERE id=true');
+  response.json({status:'ok'});
+});
+authRoutes(api,customer,rateLimit({windowMs:15*60000,limit:20,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Muitas tentativas. Aguarde antes de tentar novamente.'}}));
+settingsRoutes(business,admin,staff);
+business.post('/media',requireFeature('enable_site_customizer'),imageInput,upload);
+business.post('/media/catalog',imageInput,upload);
+servicesRoutes(business);
+productsRoutes(business);
+orderRoutes(customer,business);
+professionalRoutes(business,staff);
+appointmentRoutes(api,customer,business,staff);
+loyaltyRoutes(customer,business);
+clientRoutes(business);
+reportRoutes(business,staff);
+api.use('/client/:slug',customer);
+api.use('/owner/:slug',business);
+api.use('/staff/:slug',staff);
+api.use('/master',admin);
+api.use((_request,_response,next)=>next(new HttpError(404,'Rota não encontrada.')));
+

@@ -1,0 +1,12 @@
+/dist/
+/dist-server/
+/.next/
+/.vercel/
+/next-env.d.ts
+/*.tsbuildinfo
+/node_modules/
+/.postgres-local/
+/.media/
+/.env
+/.env.*
+!.env.example
