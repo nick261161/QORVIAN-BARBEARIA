@@ -22,6 +22,10 @@ export function settingsRoutes(business:Router,master:Router,staff:Router){
   master.get('/',platform.platformDashboard);
   master.patch('/controls',platform.setGlobal);
   master.post('/tenants',platform.createTenant);
+  master.post('/owners',platform.createOwner);
+  master.get('/accounts',platform.listAccounts);
+  master.patch('/accounts/:id',platform.updateAccount);
+  master.post('/impersonate',platform.impersonate);
   master.patch('/tenants/:id',platform.setTenantControls);
   master.post('/tenants/:id/support',platform.support);
 }

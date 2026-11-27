@@ -17,8 +17,8 @@ async function storefront(code: string) {
 export const store: RequestHandler = async (request, response) => {
   const { tenant, flags } = await storefront(slug.parse(request.params.slug));
   const [services, products, professionals, hours, loyalty] = await Promise.all([
-    pool.query('SELECT id,name,description,category,photo,price_cents,duration_minutes FROM services WHERE tenant_id=$1 AND active AND deleted_at IS NULL ORDER BY name,id', [tenant.id]),
-    flags.enable_products_store ? pool.query('SELECT id,name,description,category,photo,price_cents,sku,stock_quantity FROM products WHERE tenant_id=$1 AND active AND deleted_at IS NULL ORDER BY name,id', [tenant.id]) : null,
+    pool.query('SELECT id,name,description,category,category_id,photo,price_cents,duration_minutes FROM services WHERE tenant_id=$1 AND active AND deleted_at IS NULL ORDER BY name,id', [tenant.id]),
+    flags.enable_products_store ? pool.query('SELECT id,name,description,category,category_id,photo,price_cents,sku,stock_quantity FROM products WHERE tenant_id=$1 AND active AND deleted_at IS NULL ORDER BY name,id', [tenant.id]) : null,
     offeredProfessionals(pool, tenant.id, flags.enable_multi_professionals),
     pool.query(`SELECT weekday,closed,to_char(opens_at,'HH24:MI') AS opens_at,to_char(closes_at,'HH24:MI') AS closes_at,
       to_char(break_start,'HH24:MI') AS break_start,to_char(break_end,'HH24:MI') AS break_end FROM working_hours

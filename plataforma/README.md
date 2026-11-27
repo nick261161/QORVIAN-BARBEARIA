@@ -37,6 +37,7 @@ A porta padrão desses comandos é 5173. As contas fictícias usam `DemoAgenda!2
 - A agenda oferece horários de início às horas cheias e às meias-horas. Ela considera toda a duração do serviço, expediente, almoço, reservas e bloqueios. O PostgreSQL também rejeita reservas sobrepostas na transação.
 - O checkout valida e baixa o estoque na mesma transação. Cancelar um pedido pendente devolve as unidades uma vez. O pagamento é combinado com a loja.
 - A equipe acessa os próprios agendamentos, clientes atendidos, relatórios e perfil. A troca de senha invalida sessões antigas. Relatórios pessoais e da loja podem ser exportados em PDF, Excel e CSV com os filtros selecionados.
+- Produtos e serviços têm categorias separadas por estabelecimento. Crie uma categoria no próprio formulário do catálogo. A migração associa os itens existentes às categorias sem alterar suas reservas, pedidos ou estoque.
 - Em **Admin → Configurações**, o empresário edita a mensagem padrão, insere variáveis e confere uma prévia. Na agenda, **Enviar Confirmação** abre uma conversa no WhatsApp com a mensagem preenchida e confirma a reserva pendente no sistema. O envio é concluído manualmente no WhatsApp.
 - O navegador comprime imagens antes de enviá-las. O servidor reencoda em WebP, remove metadados e registra a chave de armazenamento. Substituições e exclusões enfileiram a retirada das imagens sem referências. Uploads abandonados vencem após 24 horas e são limpos no cron.
 - A conclusão registra a comissão vigente e credita selos ou pontos quando o clube está ativo. Alterar uma comissão preserva os valores já registrados.
@@ -53,7 +54,15 @@ A porta padrão desses comandos é 5173. As contas fictícias usam `DemoAgenda!2
 2. Defina `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` e `GOOGLE_TOKEN_ENCRYPTION_KEY` conforme o `.env.example`. Mantenha a chave de criptografia estável para preservar conexões existentes. A aplicação pede identidade por e-mail e acesso a eventos de calendários pertencentes ao profissional. [Escopos da Calendar API](https://developers.google.com/workspace/calendar/api/auth).
 3. Ative a flag **Integração Google Agenda** no painel master. Cada funcionário autoriza a própria conta em **Admin → Meu perfil**. O sistema sincroniza agendamentos futuros no calendário principal, incluindo alterações de horário e cancelamentos. Os eventos usam o fuso da loja e lembretes nativos de 60 e 15 minutos.
 
+O empresário pode vincular em **Meu perfil** um profissional disponível do próprio estabelecimento, trocar a foto e a senha e autorizar o calendário para seus atendimentos. Desconecte o calendário antes de alterar esse vínculo.
+
 O funcionário pode desconectar a conta no painel. Eventos já gravados permanecem no calendário e podem ser removidos pelo titular. Alterações feitas diretamente no Google Agenda não alteram a reserva. Falhas do provedor são tratadas fora da transação da reserva. A suíte local usa um calendário simulado.
+
+### Localização e recuperação por telefone
+
+- O empresário cadastra o endereço completo, as coordenadas e a direção da fachada em **Personalizar**. Para exibir o mapa e o Street View dentro da vitrine, configure `NEXT_PUBLIC_GOOGLE_MAPS_EMBED_KEY` antes do build. Restrinja a chave ao domínio do site e à Maps Embed API. O botão de rota e a busca por endereço funcionam sem a chave. [Mapas incorporados](https://developers.google.com/maps/documentation/embed/embedding-map) · [Links do Google Maps](https://developers.google.com/maps/documentation/urls/get-started).
+- Configure `PASSWORD_RESET_SMS_URL` e `PASSWORD_RESET_SMS_TOKEN` para ativar o envio de SMS. O webhook HTTPS recebe `{ to, message }` em JSON com autenticação Bearer. A equipe e os clientes recebem códigos de seis dígitos com validade de dez minutos. Empresários usam o suporte da plataforma.
+- A página **Master** exige sessão de desenvolvedor. O acesso técnico a uma conta individual dura vinte minutos, permite consulta e registra o operador e a conta consultada na auditoria. Bloqueios e redefinições feitos pelo Master encerram as sessões anteriores da conta.
 
 ## Código
 

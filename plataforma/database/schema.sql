@@ -352,4 +352,58 @@ CREATE INDEX IF NOT EXISTS google_calendar_jobs_due ON google_calendar_jobs(due_
 UPDATE tenants SET feature_flags=feature_flags-'enable_whatsapp_bot' WHERE feature_flags ? 'enable_whatsapp_bot';
 UPDATE platform_settings SET feature_flags=feature_flags-'enable_whatsapp_bot' WHERE feature_flags ? 'enable_whatsapp_bot';
 INSERT INTO schema_versions VALUES(6) ON CONFLICT DO NOTHING;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS platform_blocked boolean NOT NULL DEFAULT false;
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS target_user_id uuid REFERENCES users(id);
+CREATE INDEX IF NOT EXISTS users_phone_login ON users(phone) WHERE active AND NOT platform_blocked;
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id uuid PRIMARY KEY, user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  otp_hash text NOT NULL, issued_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL, attempts smallint NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 5),
+  token_version integer NOT NULL, used_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS password_reset_expiry ON password_reset_tokens(expires_at);
+INSERT INTO schema_versions VALUES(7) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  name varchar(100) NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
+  type varchar(20) NOT NULL CHECK (type IN ('PRODUCT','SERVICE')),
+  is_active boolean NOT NULL DEFAULT true,
+  UNIQUE (tenant_id,name,type),
+  UNIQUE (tenant_id,id,type)
+);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id uuid;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS category_id uuid;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category_type varchar(20) GENERATED ALWAYS AS ('PRODUCT'::varchar(20)) STORED;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS category_type varchar(20) GENERATED ALWAYS AS ('SERVICE'::varchar(20)) STORED;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_versions WHERE version=8) THEN
+    INSERT INTO categories(tenant_id,name,type)
+      SELECT tenant_id,name,'SERVICE' FROM service_categories
+      UNION SELECT tenant_id,coalesce(nullif(btrim(category),''),'Sem categoria'),'SERVICE' FROM services
+      UNION SELECT tenant_id,coalesce(nullif(btrim(category),''),'Sem categoria'),'PRODUCT' FROM products
+      ON CONFLICT DO NOTHING;
+    UPDATE services s SET category_id=c.id,category=c.name FROM categories c
+      WHERE c.tenant_id=s.tenant_id AND c.type='SERVICE' AND c.name=coalesce(nullif(btrim(s.category),''),'Sem categoria') AND s.category_id IS NULL;
+    UPDATE products p SET category_id=c.id,category=c.name FROM categories c
+      WHERE c.tenant_id=p.tenant_id AND c.type='PRODUCT' AND c.name=coalesce(nullif(btrim(p.category),''),'Sem categoria') AND p.category_id IS NULL;
+    ALTER TABLE services ADD CONSTRAINT services_category_fk FOREIGN KEY(tenant_id,category_id,category_type) REFERENCES categories(tenant_id,id,type) ON DELETE RESTRICT;
+    ALTER TABLE products ADD CONSTRAINT products_category_fk FOREIGN KEY(tenant_id,category_id,category_type) REFERENCES categories(tenant_id,id,type) ON DELETE RESTRICT;
+    INSERT INTO schema_versions VALUES(8);
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS services_category_idx ON services(tenant_id,category_id);
+CREATE INDEX IF NOT EXISTS products_category_idx ON products(tenant_id,category_id);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo text NOT NULL DEFAULT '';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_versions WHERE version=9) THEN
+    ALTER TABLE users DROP CONSTRAINT users_staff_assignment;
+    ALTER TABLE users ADD CONSTRAINT users_professional_assignment CHECK (
+      (role<>'STAFF' OR professional_id IS NOT NULL) AND (professional_id IS NULL OR role IN ('OWNER','STAFF'))
+    );
+    INSERT INTO schema_versions VALUES(9);
+  END IF;
+END $$;
 COMMIT;

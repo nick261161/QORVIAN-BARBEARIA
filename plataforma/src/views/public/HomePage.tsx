@@ -7,7 +7,8 @@ import { currency,weekdays,type Product } from '../../services/api.js';
 import { Notice } from '../../components/ui/index.js';
 import { useCart } from '../../contexts/CartContext.js';
 import { useStore } from '../../contexts/ThemeConfigContext.js';
-import { FullBleedHero } from '../../components/layout/FullBleedHero.js';
+import { HeroCarousel } from '@/components/layout/HeroCarousel';
+import { LocationStreetView } from '@/components/layout/LocationStreetView';
 
 export { useStore };
 
@@ -28,27 +29,30 @@ export function ProductAction({item}:{item:Product}){
 export function CatalogCollection({products=false}:{products?:boolean}){
   const store=useStore();const [category,setCategory]=useState('');
   const rows=products?store.products:store.services;
-  const categories=[...new Set(rows.map(item=>item.category).filter(Boolean))];
-  const visible=rows.filter(item=>!category||item.category===category);
-  return <>{categories.length>0&&<div className="acoes filtros" aria-label="Categorias">{['',...categories].map(value=><button className="botao secundario" key={value} aria-pressed={category===value} onClick={()=>setCategory(value)}>{value||'Todas'}</button>)}</div>}
+  const keyOf=(item:Product)=>item.category_id??item.category;
+  const categories=new Map(rows.filter(item=>item.category).map(item=>[keyOf(item),item.category]));
+  const visible=rows.filter(item=>!category||keyOf(item)===category);
+  return <>{categories.size>0&&<div className="acoes filtros" aria-label="Categorias">{[['','Todas'],...categories].map(([value,label])=><button className="botao secundario" key={value} aria-pressed={category===value} onClick={()=>setCategory(value)}>{label}</button>)}</div>}
     {visible.length?<div className="vitrine-grade">{visible.map(item=><CatalogCard item={item} key={item.id} duration={'duration_minutes' in item&&typeof item.duration_minutes==='number'?item.duration_minutes:undefined}
       action={products?<ProductAction item={item}/>:store.flags.enable_online_booking?<Link className="botao secundario" to={`/loja/${store.tenant.slug}/agendar?serviceId=${item.id}`} aria-label={`Agendar ${item.name}`}>Agendar</Link>:null}/>)}</div>:<Notice empty="Nenhum item disponível."/>}</>;
 }
 export function Storefront(){
   const {tenant,flags,services,professionals,hours}=useStore();const {site}=tenant;
   const root=`/loja/${tenant.slug}`;
-  const photos=[...new Set([site.backgrounds.home||site.banner,...services.map(item=>item.photo)].filter(Boolean))].slice(0,6);
-  return <><main><FullBleedHero photos={photos}>
+  const configured=site.slides.filter(Boolean);
+  const photos=[...new Set((configured.length?configured:[site.backgrounds.home||site.banner,...services.map(item=>item.photo)]).filter(Boolean))].slice(0,6);
+  return <><main><HeroCarousel photos={photos}>
     {site.address&&<p className="sobretitulo"><MapPin size={17}/> {site.address}</p>}<h1>{site.headline||tenant.name}</h1>
     {site.sections.about&&site.bio&&<p>{site.bio}</p>}<div className="acoes">
-      {flags.enable_online_booking&&<Link className="botao destaque" to={`${root}/agendar`}><CalendarDays size={20}/> Agendar horário</Link>}
+      {flags.enable_online_booking&&<Link className="botao destaque" to={`${root}/agendar`}><CalendarDays size={20}/> Agendar agora</Link>}
       {site.sections.services&&<Link className="botao contorno-claro" to={`${root}/servicos`}>Ver serviços</Link>}
-    </div></FullBleedHero>
+    </div></HeroCarousel>
     {site.sections.services&&<section className="vitrine-secao" id="servicos"><div className="largura"><h2>Escolha seu serviço.</h2><CatalogCollection/></div></section>}
     {site.sections.products&&flags.enable_products_store&&<section className="vitrine-secao contraste" id="produtos"><div className="largura"><h2>Cuidados em casa.</h2><CatalogCollection products/></div></section>}
     {(site.sections.team||site.sections.hours)&&<section className="vitrine-secao" id="horarios"><div className="largura info-loja">
       {site.sections.team&&<div><h2>Nossa equipe</h2><ul className="equipe">{professionals.map(person=><li key={person.id}>{person.photo?<OptimizedImage src={person.photo} alt=""/>:<span className="icone-suave"><UserRound size={20}/></span>}<strong>{person.name}</strong></li>)}</ul></div>}
       {site.sections.hours&&<div><h2>Horários</h2><ul className="horarios-loja">{hours.map(day=><li key={day.weekday}><strong>{weekdays[day.weekday]}</strong><span>{day.closed?'Fechado':`${day.opens_at}–${day.closes_at}${day.break_start?` · intervalo ${day.break_start}–${day.break_end}`:''}`}</span></li>)}</ul></div>}
     </div></section>}
+    <div className="largura vitrine-secao" id="localizacao"><LocationStreetView site={site}/></div>
   </main></>;
 }

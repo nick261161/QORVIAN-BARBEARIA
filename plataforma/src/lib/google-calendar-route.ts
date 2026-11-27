@@ -10,9 +10,10 @@ import {HttpError} from '../../backend/src/middlewares/error.middleware.js';
 import {config} from '../../backend/src/config/env.js';
 
 const digest=(value:string)=>createHash('sha256').update(value).digest('base64url');
-async function staff(request:NextRequest){
-  const {actor,role,tenant}=await verifySession(request.cookies.get(cookie)?.value);
-  if(role!=='STAFF'||!tenant||!actor.professional_id)throw new HttpError(403,'Apenas o funcionário pode conectar a própria agenda.');
+async function calendarAccount(request:NextRequest,requireLink=true){
+  const {actor,role,tenant,impersonating}=await verifySession(request.cookies.get(cookie)?.value);
+  if(!['STAFF','OWNER'].includes(role)||!tenant||impersonating)throw new HttpError(403,'Apenas o titular pode conectar sua agenda.');
+  if(requireLink&&!actor.professional_id)throw new HttpError(409,'Vincule seu perfil a um profissional antes de conectar a agenda.');
   return {actor,tenant,person:actor.professional_id};
 }
 function verifyOrigin(request:NextRequest){
@@ -27,17 +28,19 @@ function failure(error:unknown){return error instanceof HttpError?json({error:er
 
 export async function status(request:NextRequest){
   try{
-    const {tenant,person}=await staff(request);
+    const {tenant,person}=await calendarAccount(request,false);
     const scope=await scopedTenant(pool,tenant.id);
-    const row=await one<{google_email:string|null}>(pool,'SELECT google_email FROM professionals WHERE tenant_id=$1 AND id=$2',[tenant.id,person]);
-    return json({email:row?.google_email??null,enabled:scope.flags.enable_google_calendar,configured:Boolean(googleSettings())});
+    const row=await one<{google_email:string|null;linked:boolean}>(pool,'SELECT google_email,active AND deleted_at IS NULL AS linked FROM professionals WHERE tenant_id=$1 AND id=$2',[tenant.id,person]);
+    return json({email:row?.google_email??null,linked:Boolean(row?.linked),enabled:scope.flags.enable_google_calendar,configured:Boolean(googleSettings())});
   }catch(error){return failure(error);}
 }
 export async function connect(request:NextRequest){
   try{
     verifyOrigin(request);
-    const {tenant,person,actor}=await staff(request);
+    const {tenant,person,actor}=await calendarAccount(request);
     assertFeature((await scopedTenant(pool,tenant.id)).flags,'enable_google_calendar');
+    if(!await one(pool,'SELECT id FROM professionals WHERE tenant_id=$1 AND id=$2 AND active AND deleted_at IS NULL',[tenant.id,person]))
+      throw new HttpError(409,'O profissional vinculado está indisponível.');
     const {oauth,settings,challengeMethod}=await googleClient();
     if(settings.uri.origin!==request.headers.get('origin'))throw new HttpError(400,'Abra o painel pela origem configurada para o Google Agenda.');
     const state=randomBytes(32).toString('base64url');
@@ -57,7 +60,7 @@ export async function callback(request:NextRequest){
     return new Response(null,{status:303,headers:{Location:profile.href,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'}});
   }
   try{
-    const {tenant,person,actor}=await staff(request);
+    const {tenant,person,actor}=await calendarAccount(request);
     const state=request.nextUrl.searchParams.get('state')??'';
     const code=request.nextUrl.searchParams.get('code')??'';
     if(!/^[a-zA-Z0-9_-]{43}$/.test(state))return done('erro');
@@ -77,7 +80,8 @@ export async function callback(request:NextRequest){
       assertFeature((await scopedTenant(db,tenant.id,true)).flags,'enable_google_calendar');
       const saved=await one(db,`UPDATE professionals p SET google_refresh_token=$3,google_email=$4,google_subject=$5,google_connection_id=$6
         WHERE p.tenant_id=$1 AND p.id=$2 AND p.active AND p.deleted_at IS NULL AND EXISTS(
-          SELECT 1 FROM users u WHERE u.id=$7 AND u.tenant_id=p.tenant_id AND u.professional_id=p.id AND u.role='STAFF' AND u.active AND u.token_version=$8)
+          SELECT 1 FROM users u WHERE u.id=$7 AND u.tenant_id=p.tenant_id AND u.professional_id=p.id AND u.role IN ('STAFF','OWNER')
+          AND u.active AND NOT u.platform_blocked AND u.token_version=$8)
         RETURNING p.id`,[tenant.id,person,encrypted,identity.email,identity.sub,randomUUID(),actor.id,actor.token_version]);
       if(!saved)throw new HttpError(403,'A conta de funcionário não está ativa.');
       await db.query(`INSERT INTO google_calendar_jobs(appointment_id,tenant_id) SELECT id,tenant_id FROM appointments
@@ -91,7 +95,7 @@ export async function callback(request:NextRequest){
 export async function disconnect(request:NextRequest){
   try{
     verifyOrigin(request);
-    const {tenant,person,actor}=await staff(request);
+    const {tenant,person,actor}=await calendarAccount(request);
     await transaction(async db=>{
       await scopedTenant(db,tenant.id,true);
       const updated=await one(db,`UPDATE professionals p SET google_refresh_token=NULL,google_email=NULL,google_subject=NULL,google_connection_id=NULL

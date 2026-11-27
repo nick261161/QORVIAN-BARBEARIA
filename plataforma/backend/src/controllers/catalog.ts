@@ -9,7 +9,8 @@ import { assertMediaUrl,queueRetiredMedia } from '../../../src/lib/storage.js';
 export function catalog(table: 'services' | 'products') {
   const isService = table === 'services';
   const feature = isService ? undefined : 'enable_products_store';
-  const columns = `id,name,description,category,photo,price_cents,active${isService ? ',duration_minutes,custom_commission_rate' : ',sku,stock_quantity,commission_rate'}`;
+  const type=isService?'SERVICE':'PRODUCT';
+  const columns = `id,name,description,category,category_id,photo,price_cents,active${isService ? ',duration_minutes,custom_commission_rate' : ',sku,stock_quantity,commission_rate'}`;
   const list: RequestHandler = async (request, response) => {
     response.json((await pool.query(`SELECT ${columns} FROM ${table} WHERE tenant_id=$1 AND deleted_at IS NULL ORDER BY name,id`, [request.scope!.tenant.id])).rows);
   };
@@ -19,13 +20,17 @@ export function catalog(table: 'services' | 'products') {
     const row = await write(request, async (db, { tenant,flags }) => {
       const previous=record?exists(await one<{photo:string}>(db,`SELECT photo FROM ${table} WHERE tenant_id=$1 AND id=$2 AND deleted_at IS NULL`,[tenant.id,record])).photo:'';
       if(input.photo!==previous)await assertMediaUrl(db,tenant.id,input.photo);
-      const fields: Record<string,string|number|boolean|null|undefined> = { name:input.name,description:input.description,category:input.category,photo:input.photo,price_cents:input.price_cents,active:input.active };
+      const legacyName=input.category||'Sem categoria';
+      if(!input.category_id)await db.query('INSERT INTO categories(tenant_id,name,type) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',[tenant.id,legacyName,type]);
+      const selected=await one<{name:string;id:string}>(db,`SELECT name,id FROM categories WHERE tenant_id=$1 AND type=$2 AND is_active
+        AND (($3::uuid IS NOT NULL AND id=$3) OR ($3::uuid IS NULL AND name=$4))`,[tenant.id,type,input.category_id??null,legacyName]);
+      if(!selected)throw new HttpError(400,'Selecione uma categoria ativa deste estabelecimento e deste catálogo.');
+      const fields: Record<string,string|number|boolean|null|undefined> = { name:input.name,description:input.description,category:selected.name,category_id:selected.id,photo:input.photo,price_cents:input.price_cents,active:input.active };
       let stockDifference=0;
       if ('duration_minutes' in input) {
         const serviceInput=service.parse(input);
         fields.duration_minutes=serviceInput.duration_minutes;
         if (serviceInput.custom_commission_rate!==undefined) { assertFeature(flags,'enable_commissions'); fields.custom_commission_rate=serviceInput.custom_commission_rate; }
-        if (input.category) await db.query('INSERT INTO service_categories(tenant_id,name) VALUES($1,$2) ON CONFLICT DO NOTHING',[tenant.id,input.category]);
       } else {
         const productInput=product.parse(input);
         fields.sku=productInput.sku;

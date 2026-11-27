@@ -71,8 +71,8 @@ export const saveSite: RequestHandler = async (request, response) => {
   const { name, ...settings } = site.parse(request.body);
   const tenant = await write(request, async (db, { tenant }) => {
     const previous=presentTenant(tenant).site;
-    const oldUrls=[previous.logo,previous.favicon,previous.banner,...Object.values(previous.backgrounds)];
-    const newUrls=[settings.logo,settings.favicon??'',settings.banner,...Object.values(settings.backgrounds??{})];
+    const oldUrls=[previous.logo,previous.favicon,previous.banner,...Object.values(previous.backgrounds),...previous.slides];
+    const newUrls=[settings.logo,settings.favicon??'',settings.banner,...Object.values(settings.backgrounds??{}),...(settings.slides??[])];
     for(const url of new Set(newUrls))if(!oldUrls.includes(url))await assertMediaUrl(db,tenant.id,url);
     const updated=exists(await one<Tenant>(db,'UPDATE tenants SET name=$2,site_settings=$3 WHERE id=$1 RETURNING *',[tenant.id,name,settings]));
     await queueRetiredMedia(db,tenant.id,oldUrls.filter(url=>!newUrls.includes(url)));
@@ -88,6 +88,7 @@ export const savePolicy: RequestHandler = async (request, response) => {
 };
 
 export const saveConfirmation:RequestHandler=async(request,response)=>{
+  if(request.identity?.actor.role!=='OWNER')throw new HttpError(403,'Apenas o empresário pode editar a mensagem.');
   const {confirmation_message_template:template}=z.strictObject({confirmation_message_template:z.string().trim().min(1).max(2000)}).parse(request.body);
   await write(request,async(db,{tenant})=>db.query(`INSERT INTO business_settings(tenant_id,confirmation_message_template) VALUES($1,$2)
     ON CONFLICT (tenant_id) DO UPDATE SET confirmation_message_template=EXCLUDED.confirmation_message_template`,[tenant.id,template]));

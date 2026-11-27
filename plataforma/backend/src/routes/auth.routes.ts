@@ -10,5 +10,8 @@ export function authRoutes(api:Router,customer:Router,limiter:RequestHandler){
   api.get('/auth/session',requireAuth,auth.session);
   api.post('/auth/logout',auth.signOut);
   api.post('/auth/exit-support',requireAuth,exitSupport);
+  api.post('/auth/forgot-password-phone',limiter,auth.forgotPassword);
+  api.post('/auth/reset-password-phone',limiter,auth.resetPassword);
   customer.patch('/profile',auth.editProfile);
+  customer.patch('/password',limiter,auth.changeClientPassword);
 }

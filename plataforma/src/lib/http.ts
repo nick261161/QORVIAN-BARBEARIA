@@ -88,7 +88,7 @@ owner.post('/media',requireFeature('enable_site_customizer'),upload('banner'));
 owner.post('/media/catalog',upload('catalog'));
 staff.post('/media',upload('avatar'));
 
-const scopedEndpoints=new Set(['services','products','professionals','loyalty','orders','settings','clients','reports','upload']);
+const scopedEndpoints=new Set(['categories','services','products','professionals','loyalty','orders','settings','clients','reports','upload']);
 async function routeParts(native:NextRequest,parts:string[]){
   const [resource,action]=parts;
   const requestedSlug=native.nextUrl.searchParams.get('slug');
@@ -103,6 +103,7 @@ async function routeParts(native:NextRequest,parts:string[]){
   if(!identity.tenant)throw new HttpError(403,'Selecione um estabelecimento.');
   const prefix=({OWNER:'owner',STAFF:'staff',CLIENT:'client',SUPER_ADMIN:'master'} as const)[identity.role];
   const slug=requestedSlug??identity.tenant.slug;
+  if(resource==='categories'&&prefix!=='owner')throw new HttpError(403,'Apenas o empresário gerencia categorias.');
   if(resource==='upload'){
     if(prefix==='client')throw new HttpError(403,'Você não pode enviar imagens.');
     return [prefix,slug,'media',...(prefix==='owner'?['catalog']:[])];
@@ -172,7 +173,7 @@ export async function handle(native:NextRequest){
     cookie(key:string,value:string,options:CookieOptions){setCookie(key,value,options);return this;},
     clearCookie(key:string,options:CookieOptions){setCookie(key,'',{...options,maxAge:0});return this;},
   } as unknown as Response;
-  const request={nextRequest:native,params:{},query:{},cookies:Object.fromEntries(native.cookies.getAll().map(({name,value})=>[name,value]))} as unknown as Context;
+  const request={nextRequest:native,method:native.method,path:native.nextUrl.pathname,params:{},query:{},cookies:Object.fromEntries(native.cookies.getAll().map(({name,value})=>[name,value]))} as unknown as Context;
   try{
     checkOrigin(native);
     const parts=await routeParts(native,split(native.nextUrl.pathname).slice(1).map(part=>decodeURIComponent(part)));
@@ -205,7 +206,7 @@ export async function handle(native:NextRequest){
 async function rollbackUploads(request:Context){
   const source=request.body as Record<string,unknown>;
   const backgrounds=typeof source.backgrounds==='object'&&source.backgrounds!==null?Object.values(source.backgrounds):[];
-  const urls=[source.photo,source.logo,source.banner,source.favicon,...backgrounds].filter((url):url is string=>typeof url==='string'&&url.startsWith('/media/'));
+  const urls=[source.photo,source.logo,source.banner,source.favicon,...backgrounds,...(Array.isArray(source.slides)?source.slides:[])].filter((url):url is string=>typeof url==='string'&&url.startsWith('/media/'));
   if(!urls.length)return;
   const {tenant}=request.scope!;
   const {actor}=request.identity!;

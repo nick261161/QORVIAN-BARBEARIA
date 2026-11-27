@@ -1,4 +1,5 @@
 'use client';
+import {PasswordInput} from '@/components/ui/PasswordInput';
 import { useState, type FormEvent } from 'react';
 import { Building2, Headset, LogOut, Plus, Search, Settings2, Shield } from 'lucide-react';
 import { Link, useNavigate } from '@/lib/navigation';
@@ -6,6 +7,7 @@ import { featureLabels, featureNames, type Flags } from '../../../shared/feature
 import { api, useResource } from '../../services/api.js';
 import { AccessForm, useSession } from '../../contexts/AuthContext.js';
 import { Brand, FormPanel, Notice, Result, useAction, usePageTitle } from '../../components/ui/index.js';
+import {MasterAccounts} from './MasterAccounts';
 
 type Controls = { feature_flags: Partial<Flags>; flags: Flags; override_limit: number | null; max_professionals: number };
 type StoreRow = Controls & { id: string; slug: string; name: string; kind: 'BARBEARIA' | 'SALAO' | 'ESTETICA'; status: 'ATIVO' | 'SUSPENSO' };
@@ -51,6 +53,7 @@ export function Master() {
           </tr>)}</tbody></table></div>{!rows?.length && <Notice empty="Nenhum estabelecimento encontrado." />}
         </section>
         {creating && <NewStore onDone={() => { setCreating(false); dashboard.refresh(); }} />}
+        <MasterAccounts/>
         <div className="controles-master">
           <FeaturePanel key="global" endpoint="/master/controls" title="Controles globais" control={data.global} refresh={dashboard.refresh} />
           {tenant && <FeaturePanel key={tenant.id} endpoint={`/master/tenants/${tenant.id}`} title={tenant.name} control={tenant} refresh={dashboard.refresh} local>
@@ -87,13 +90,13 @@ function NewStore({ onDone }: { onDone: () => void }) {
   const action = useAction();
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
-    const body = { name: data.get('name'), slug: data.get('slug'), kind: data.get('kind'), timezone: data.get('timezone'), owner: { name: data.get('owner_name'), phone: data.get('owner_phone'), password: data.get('password') } };
-    void action.perform(() => api('/master/tenants', { method: 'POST', body })).then(ok => { if (ok) onDone(); });
+    const body = { name: data.get('name'), slug: data.get('slug'), kind: data.get('kind'), timezone: data.get('timezone'), owner: { name: data.get('owner_name'), email:data.get('owner_email'),phone: data.get('owner_phone'), password: data.get('password') } };
+    void action.perform(() => api('/master/owners', { method: 'POST', body })).then(ok => { if (ok) onDone(); });
   }
   return <FormPanel title="Cadastrar estabelecimento" submit={submit} pending={action.pending} label="Cadastrar">
     <div className="form-colunas"><label>Nome do estabelecimento<input name="name" required /></label><label>Slug<input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required placeholder="exemplo-bela" /></label>
       <label>Tipo<select name="kind">{Object.entries(types).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label><label>Fuso IANA<input name="timezone" defaultValue="America/Fortaleza" required /></label>
-      <label>Nome do proprietário<input name="owner_name" required /></label><label>Telefone do proprietário<input name="owner_phone" type="tel" required /></label></div>
-    <label>Senha inicial<input name="password" type="password" minLength={8} maxLength={72} required autoComplete="new-password" /></label><Result error={action.error} success={action.success} />
+      <label>Nome do proprietário<input name="owner_name" required /></label><label>E-mail do proprietário<input name="owner_email" type="email" required /></label><label>Telefone do proprietário<input name="owner_phone" type="tel" required /></label></div>
+    <label>Senha inicial<PasswordInput name="password" minLength={8} maxLength={72} required autoComplete="new-password" /></label><Result error={action.error} success={action.success} />
   </FormPanel>;
 }

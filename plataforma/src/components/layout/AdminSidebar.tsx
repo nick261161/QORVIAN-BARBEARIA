@@ -1,7 +1,7 @@
 'use client';
-import type { LucideIcon } from 'lucide-react';
-import { NavLink } from '@/lib/navigation';
+import {AdminNavLinks,AdminNavTabs,type AdminNavProps} from './AdminNavTabs';
 
-export function AdminSidebar({path,tabs,label='Painel do empresário'}:{path:string;label?:string;tabs:readonly {path:string;label:string;icon:LucideIcon}[]}){
-  return <aside className="barra-lateral"><nav aria-label={label}>{tabs.map(({path:part,label,icon:Icon})=><NavLink end={!part} to={part?`${path}/${part}`:path} key={part}><Icon size={19}/> {label}</NavLink>)}</nav></aside>;
+export function AdminSidebar(props:AdminNavProps){
+  return <><aside className="barra-lateral"><nav aria-label={props.label??'Painel do empresário'}><AdminNavLinks {...props}/></nav></aside>
+    <AdminNavTabs {...props}/></>;
 }

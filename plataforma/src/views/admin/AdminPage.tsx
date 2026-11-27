@@ -9,6 +9,5 @@ export async function AdminPage({section=''}:{section?:string}){
     if(!['','agenda','relatorios','meu-perfil'].includes(section))notFound();
     return <StaffArea store={tenant.slug} section={section}/>;
   }
-  if(section==='meu-perfil')notFound();
   return <OwnerArea store={tenant.slug} currentSection={section}/>;
 }

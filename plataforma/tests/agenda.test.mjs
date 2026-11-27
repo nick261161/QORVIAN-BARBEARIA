@@ -292,4 +292,86 @@ test('Fluxos da agenda com PostgreSQL real', async t => {
     assert.equal((await jobs()).length,0);
   });
 
+  await t.test('contas Master com busca, bloqueio, redefinição e suporte somente para consulta',async()=>{
+    const body={slug:'nova-loja',name:'Nova Loja',kind:'SALAO',timezone:'America/Fortaleza',
+      owner:{email:'negocio@example.test',name:'Dona da Loja',phone:'(85) 90000-0026',password:demo}};
+    await request('/master/owners',403,{cookie:owner,method:'POST',body});
+    await request('/master/owners',201,{cookie:master,method:'POST',body});
+    const {data:directory}=await request('/master/accounts?q=negocio%40example.test&role=OWNER',200,{cookie:master});
+    assert.equal(directory.items.length,1);
+    assert.equal(directory.items[0].email,body.owner.email);
+    assert.equal('password_hash' in directory.items[0],false);
+    const {data:clientDirectory}=await request('/master/accounts?q=900000025&role=CLIENT',200,{cookie:master});
+    assert.equal(clientDirectory.items.length,1);
+    const clientId=clientDirectory.items[0].id;
+    const {cookie:support}=await request('/master/impersonate',200,{cookie:master,method:'POST',body:{user_id:clientId}});
+    const {data:identity}=await request('/auth/session',200,{cookie:support});
+    assert.equal(identity.id,clientId);assert.equal(identity.read_only_support,true);
+    await request(`/client/${slug}/appointments`,200,{cookie:support});
+    await request(`/client/${slug}/profile`,403,{cookie:support,method:'PATCH',body:{name:'Negado',phone:'(85) 90000-0021'}});
+    await request('/master/accounts',403,{cookie:support});
+    ({cookie:master}=await request('/auth/exit-support',204,{cookie:support,method:'POST'}));
+    await request(`/master/accounts/${clientId}`,204,{cookie:master,method:'PATCH',body:{blocked:true}});
+    await request('/auth/session',401,{cookie:first});
+    await request('/auth/login',401,{method:'POST',body:{phone:'(85) 90000-0025',password:demo}});
+    await request(`/master/accounts/${clientId}`,204,{cookie:master,method:'PATCH',body:{blocked:false}});
+    const password='AgendaTesteNova2026!';
+    await request(`/master/accounts/${clientId}`,204,{cookie:master,method:'PATCH',body:{password}});
+    const {data}=await request('/auth/login',200,{method:'POST',body:{phone:'(85) 90000-0025',password}});
+    assert.equal(data.redirect_to,'/minha-conta');
+    const events=await pool.query('SELECT event FROM audit_events WHERE target_user_id=$1',[clientId]);
+    assert.ok(events.rows.some(row=>row.event==='ACCOUNT_SUPPORT_STARTED'));
+    assert.ok(events.rows.some(row=>row.event==='ACCOUNT_PASSWORD_RESET'));
+  });
+
+  await t.test('OTP único de seis dígitos e bloqueio da recuperação de empresários',async()=>{
+    const {issuePhoneCode,resetPhonePassword}=await import('../dist-server/src/services/password-reset.service.js');
+    await request('/auth/forgot-password-phone',403,{method:'POST',body:{phone:'(85) 90000-0002'}});
+    await assert.rejects(issuePhoneCode({phone:'+5585900000001'},async()=>assert.fail('Não deve enviar SMS')),error=>error.status===403);
+    const identity={phone:'+5585900000022',slug};
+    let code='';
+    const {challenge}=await issuePhoneCode(identity,async(phone,otp)=>{assert.equal(phone,identity.phone);code=otp;});
+    assert.match(code,/^\d{6}$/);
+    const row=(await pool.query('SELECT otp_hash,expires_at-issued_at AS validity FROM password_reset_tokens WHERE id=$1',[challenge])).rows[0];
+    assert.notEqual(row.otp_hash,code);assert.equal(row.validity.minutes,10);
+    const wrong=code==='123456'?'654321':'123456';
+    await assert.rejects(resetPhonePassword({...identity,challenge,code:wrong,password:demo}),error=>error.status===400);
+    assert.equal((await pool.query('SELECT attempts FROM password_reset_tokens WHERE id=$1',[challenge])).rows[0].attempts,1);
+    const password='ClienteComSenhaNova2026!';
+    await request('/auth/reset-password-phone',204,{method:'POST',body:{...identity,challenge,code,password}});
+    await request('/auth/session',401,{cookie:second});
+    await assert.rejects(resetPhonePassword({...identity,challenge,code,password}),error=>error.status===400);
+    await request('/auth/login',200,{method:'POST',body:{phone:identity.phone,password}});
+  });
+
+  await t.test('categorias filtradas por tipo e protegidas por chaves estrangeiras',async()=>{
+    const path=`${business}/categories`;
+    const services=await request(path+'?type=SERVICE',200,{cookie:owner});
+    const products=await request(path+'?type=PRODUCT',200,{cookie:owner});
+    assert.ok(services.data.length&&services.data.every(item=>item.type==='SERVICE'));
+    assert.ok(products.data.length&&products.data.every(item=>item.type==='PRODUCT'));
+    const {data:category}=await request(path,201,{method:'POST',cookie:owner,body:{name:'Edição especial',type:'PRODUCT'}});
+    const product={name:'Item de teste',description:'',photo:'',active:true,price_cents:1200,category_id:category.id};
+    await request(`${business}/services`,400,{method:'POST',cookie:owner,body:{...product,duration_minutes:30}});
+    const {data:item}=await request(`${business}/products`,201,{method:'POST',cookie:owner,body:product});
+    assert.equal(item.category_id,category.id);
+    await request(`${path}/${category.id}?type=PRODUCT`,409,{method:'DELETE',cookie:owner});
+    await request(`${path}/${category.id}`,200,{method:'PUT',cookie:owner,body:{type:'PRODUCT',name:'Nova edição'}});
+    assert.equal((await request(storefront,200)).data.products.find(row=>row.id===item.id).category,'Nova edição');
+    const {data:other}=await request('/auth/salao-teste/login',200,{method:'POST',body:{phone:'(85) 90000-0023',password:demo}});
+    assert.notEqual(other.tenant_id,tenant);
+    const foreign=(await pool.query("INSERT INTO categories(tenant_id,name,type) VALUES($1,'Restrita','PRODUCT') RETURNING id",[other.tenant_id])).rows[0];
+    await request(`${business}/products`,400,{method:'POST',cookie:owner,body:{...product,category_id:foreign.id}});
+  });
+
+  await t.test('empresário só vincula profissional disponível do próprio estabelecimento',async()=>{
+    const {data:profile}=await request(`${business}/profile`,200,{cookie:owner});
+    assert.equal(profile.professional_id,null);
+    await request(`${business}/profile`,409,{method:'PATCH',cookie:owner,body:{professional_id}});
+    const free=(await pool.query("INSERT INTO professionals(tenant_id,name) VALUES($1,'Profissional livre') RETURNING id",[tenant])).rows[0];
+    const {data:linked}=await request(`${business}/profile`,200,{method:'PATCH',cookie:owner,body:{professional_id:free.id}});
+    assert.equal(linked.professional_id,free.id);
+    await request(`${business}/profile`,200,{method:'PATCH',cookie:owner,body:{professional_id:null}});
+  });
+
 });

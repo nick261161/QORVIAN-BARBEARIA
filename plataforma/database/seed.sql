@@ -5,6 +5,8 @@ INSERT INTO tenants (id,slug,name,kind,site_settings) VALUES (
   '10000000-0000-4000-8000-000000000001', 'navalha-e-cia', 'Navalha & Cia.', 'BARBEARIA',
   '{"headline":"Corte no seu estilo.","bio":"Do degradê ao clássico, escolha seu serviço e reserve com seu barbeiro.","address":"Fortaleza, CE","banner":"/barbearia.webp","primary":"#17231c","secondary":"#d6ed99"}'
 ) ON CONFLICT DO NOTHING;
+UPDATE tenants SET feature_flags=feature_flags||'{"enable_google_calendar":true}'::jsonb
+WHERE slug='navalha-e-cia' AND NOT(feature_flags ? 'enable_google_calendar');
 
 INSERT INTO users (id,tenant_id,role,name,phone,password_hash) VALUES
   ('10000000-0000-4000-8000-000000000010',NULL,'SUPER_ADMIN','Admin da plataforma','+5585900000001','$2b$12$rQDN6z96W3XITchv5sJQE.264.NN.U7hMkCDBNJvy/qYpY77cZE46'),
@@ -47,6 +49,11 @@ CASE WHEN day>=2 THEN '12:00'::time END,CASE WHEN day>=2 THEN '13:00'::time END 
 ON CONFLICT DO NOTHING;
 
 INSERT INTO service_categories (tenant_id,name) SELECT DISTINCT tenant_id,category FROM services WHERE category<>'' AND deleted_at IS NULL ON CONFLICT DO NOTHING;
+INSERT INTO categories(tenant_id,name,type)
+  SELECT DISTINCT tenant_id,category,'SERVICE' FROM services WHERE category<>'' AND deleted_at IS NULL
+  UNION SELECT DISTINCT tenant_id,category,'PRODUCT' FROM products WHERE category<>'' AND deleted_at IS NULL ON CONFLICT DO NOTHING;
+UPDATE services s SET category_id=c.id FROM categories c WHERE c.tenant_id=s.tenant_id AND c.type='SERVICE' AND c.name=s.category AND s.category_id IS NULL;
+UPDATE products p SET category_id=c.id FROM categories c WHERE c.tenant_id=p.tenant_id AND c.type='PRODUCT' AND c.name=p.category AND p.category_id IS NULL;
 UPDATE products SET stock_quantity=12,sku='NAV-'||right(id::text,3)
 WHERE id IN ('10000000-0000-4000-8000-000000000040','10000000-0000-4000-8000-000000000041','10000000-0000-4000-8000-000000000042') AND sku='';
 INSERT INTO loyalty_config(tenant_id,is_active,program_name,reward_value,rules_description) VALUES

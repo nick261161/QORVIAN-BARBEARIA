@@ -1,4 +1,5 @@
 'use client';
+import {LocationStreetView} from '@/components/layout/LocationStreetView';
 import { OptimizedImage } from '@/components/ui/OptimizedImage';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { CalendarDays, Check, Clock3, Scissors, UserRound } from 'lucide-react';
@@ -61,6 +62,7 @@ export function BookingFlow({ tenant, services, professionals, initial, suggeste
   if (booked) return <section className="painel reserva-sucesso"><span className="icone-suave"><Check size={25} /></span><h2>{manual ? 'Encaixe confirmado' : 'Reserva recebida'}</h2>
     <p>{booked.line_items.map(item => item.name).join(' + ')} com {staff.find(item => item.id === person)?.name}.</p>
     <strong>{dateTime(booked.starts_at, tenant.timezone)} · {currency(booked.total_cents)}</strong>
+    {!manual&&<LocationStreetView compact site={tenant.site}/>}
     {!manual && <Link className="botao primario" to={`/loja/${tenant.slug}/conta`}>Ver meus agendamentos</Link>}
   </section>;
 
@@ -105,6 +107,7 @@ export function BookingFlow({ tenant, services, professionals, initial, suggeste
       {person && <p><UserRound size={17} /> {staff.find(item => item.id === person)?.name}</p>}
       {start && <p><Clock3 size={17} /> {dateTime(start, tenant.timezone)} · {minutes} min</p>}
       <div className="reserva-total"><span>Total</span><strong>{currency(price)}</strong></div>
+      {!manual&&step>=2&&<LocationStreetView compact site={tenant.site}/>}
     </aside>
   </div>;
 }

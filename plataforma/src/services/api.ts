@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Flags, Role, Site, Status } from '../../shared/features.js';
 
-export type Session = { id: string; role: Role; name: string; phone: string; slug: string | null; impersonating: boolean; professional_id?: string | null };
+export type Session = { id: string; role: Role; name: string; phone: string; slug: string | null; impersonating: boolean; read_only_support?:boolean;redirect_to?:string;professional_id?: string | null };
 export type Tenant = { id: string; slug: string; name: string; kind: string; timezone: string; cancellation_minutes: number; slot_minutes:30; site: Site };
-export type Product = { id: string; name: string; description: string; category: string; photo: string; price_cents: number; active?: boolean; sku?:string; stock_quantity?:number; commission_rate?:number|null };
+export type CatalogCategory={id:string;name:string;type:'PRODUCT'|'SERVICE';is_active:boolean};
+export type Product = { id: string; name: string; description: string; category: string; category_id?:string|null;photo: string; price_cents: number; active?: boolean; sku?:string; stock_quantity?:number; commission_rate?:number|null };
 export type Service = Product & { duration_minutes: number; custom_commission_rate?:number|null };
 export type Professional = { id: string; name: string; photo: string; service_ids: string[]; active?: boolean; default_service_commission?:number; default_product_commission?:number; staff_phone?:string|null };
 export type DayRule = { weekday: number; closed: boolean; opens_at: string | null; closes_at: string | null; break_start: string | null; break_end: string | null };

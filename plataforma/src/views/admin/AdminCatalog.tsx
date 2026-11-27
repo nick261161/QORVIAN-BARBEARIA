@@ -1,10 +1,12 @@
 'use client';
+import {PasswordInput} from '@/components/ui/PasswordInput';
 import { OptimizedImage } from '@/components/ui/OptimizedImage';
 import { useState, type FormEvent } from 'react';
 import { Pencil, Plus, Scissors, Trash2, UserRound } from 'lucide-react';
-import { api, currency, useResource, type Business, type Product, type Professional, type Service } from '../../services/api.js';
+import { api, currency, useResource, type Business, type CatalogCategory,type Product, type Professional, type Service } from '../../services/api.js';
 import { FormPanel, Notice, Result, useAction } from '../../components/ui/index.js';
 import { MediaField } from '../../components/ui/MediaField.js';
+import { CategorySelectField } from '@/components/ui/CategorySelectField';
 
 type Item = Product | Service;
 type Path = { base: string; path: 'services' | 'products'; commissions:boolean };
@@ -13,6 +15,8 @@ const itemType = (path: Path['path']) => path === 'services' ? 'serviço' : 'pro
 export function Catalog({ base, path,commissions }: Path) {
   const url = `${base}/${path}`;
   const items = useResource<Item[]>(url);
+  const categoryType=path==='services'?'SERVICE':'PRODUCT';
+  const categoryList=useResource<CatalogCategory[]>(`/categories?type=${categoryType}`);
   const [editing, setEditing] = useState<Item | 'new' | null>(null);
   const [removing, setRemoving] = useState('');
   const type = itemType(path);
@@ -26,11 +30,12 @@ export function Catalog({ base, path,commissions }: Path) {
       <div className="acoes"><button className="botao secundario quadrado" aria-label={`Editar ${item.name}`} onClick={() => setEditing(item)}><Pencil size={17} /></button>
         {removing === item.id ? <><button className="botao perigo" disabled={action.pending} onClick={() => { void action.perform(() => api(`${url}/${item.id}`, { method: 'DELETE' }), 'Item removido.').then(ok => { if (ok) { setRemoving(''); if (editing !== 'new' && editing?.id === item.id) setEditing(null); } }); }}>Confirmar</button><button className="botao secundario" onClick={() => setRemoving('')}>Voltar</button></> : <button className="botao secundario quadrado" aria-label={`Remover ${item.name}`} onClick={() => setRemoving(item.id)}><Trash2 size={17} /></button>}</div>
     </li>)}</ul>
-  </section>{editing && <EditItem key={editing === 'new' ? 'new' : editing.id} url={url} path={path} media={`${base}/media/catalog`} commissions={commissions} item={editing === 'new' ? undefined : editing} done={() => { setEditing(null); items.refresh(); }} close={() => setEditing(null)} />}
-  {path==='services'&&<Categories base={base} onUpdated={items.refresh}/>}</>;
+  </section>{editing && <EditItem key={editing === 'new' ? 'new' : editing.id} url={url} path={path} media={`${base}/media/catalog`} commissions={commissions} item={editing === 'new' ? undefined : editing}
+    categories={categoryList.data??[]} refreshCategories={categoryList.refresh} done={() => { setEditing(null); items.refresh(); }} close={() => setEditing(null)} />}
+  <Categories type={categoryType} rows={categoryList} onUpdated={items.refresh}/></>;
 }
 
-function EditItem({ url, path, item, media, commissions,done, close }: { url: string; path: Path['path']; item?: Item; media:string;commissions:boolean; done: () => void; close: () => void }) {
+function EditItem({ url, path, item, media, commissions,categories,refreshCategories,done, close }: { url: string; path: Path['path']; item?: Item; media:string;commissions:boolean;categories:CatalogCategory[];refreshCategories:()=>void;done: () => void; close: () => void }) {
   const action = useAction();
   const [photo,setPhoto]=useState(item?.photo??'');
   const rate=item&&'duration_minutes' in item?item.custom_commission_rate:item?.commission_rate;
@@ -38,14 +43,15 @@ function EditItem({ url, path, item, media, commissions,done, close }: { url: st
     event.preventDefault(); const data = new FormData(event.currentTarget);
     const override=commissions?(data.get('commission')===''?null:Math.round(Number(data.get('commission'))*100)):undefined;
     const stock=Number(data.get('stock'));
-    const values = { name: data.get('name'), description: data.get('description'), category: data.get('category'), photo,
+    const values = { name: data.get('name'), description: data.get('description'), category_id: data.get('category_id'), photo,
       price_cents: Math.round(Number(data.get('price')) * 100), active: data.get('active') === 'on', ...(path === 'services' ? { duration_minutes: Number(data.get('duration')),custom_commission_rate:override } : {
         sku:data.get('sku'),commission_rate:override,...(!item||stock!==item.stock_quantity?{stock_quantity:stock,stock_expected:item?.stock_quantity}:{}),
       }) };
     void action.perform(() => api(item ? `${url}/${item.id}` : url, { method: item ? 'PUT' : 'POST', body: values })).then(ok => { if (ok) done(); });
   }
   return <FormPanel title={`${item ? 'Editar' : 'Novo'} ${itemType(path)}`} submit={submit} pending={action.pending}>
-    <div className="form-colunas"><label>Nome<input name="name" defaultValue={item?.name} required maxLength={100} /></label><label>Categoria<input name="category" defaultValue={item?.category} maxLength={80} /></label></div>
+    <label>Nome<input name="name" defaultValue={item?.name} required maxLength={100} /></label>
+    <CategorySelectField type={path==='services'?'SERVICE':'PRODUCT'} categories={categories} initial={item?.category_id} refresh={refreshCategories}/>
     <label>Descrição<textarea name="description" defaultValue={item?.description} maxLength={1000} rows={3} /></label>
     <div className="form-colunas"><label>Preço (R$)<input name="price" type="number" defaultValue={(item?.price_cents ?? 0) / 100} min="0" max="100000" step="0.01" required /></label>
       {path === 'services' && <label>Duração (min)<input name="duration" type="number" defaultValue={item && 'duration_minutes' in item ? item.duration_minutes : 30} min="5" max="480" required /></label>}</div>
@@ -57,13 +63,13 @@ function EditItem({ url, path, item, media, commissions,done, close }: { url: st
   </FormPanel>;
 }
 
-function Categories({base,onUpdated}:{base:string;onUpdated:()=>void}){
-  const path=`${base}/categories`;const rows=useResource<{id:string;name:string}[]>(path);const [chosen,setChosen]=useState('');const [name,setName]=useState('');
+function Categories({type,rows,onUpdated}:{type:CatalogCategory['type'];rows:ReturnType<typeof useResource<CatalogCategory[]>>;onUpdated:()=>void}){
+  const path='/categories';const [chosen,setChosen]=useState('');const [name,setName]=useState('');
   const action=useAction(()=>{rows.refresh();onUpdated();});
-  return <FormPanel title="Categorias de serviços" label={chosen?'Salvar categoria':'Criar categoria'} pending={action.pending} submit={event=>{event.preventDefault();void action.perform(()=>api(chosen?`${path}/${chosen}`:path,{method:chosen?'PUT':'POST',body:{name}})).then(ok=>{if(ok){setChosen('');setName('');}});}}>
+  return <FormPanel title={type==='SERVICE'?'Categorias de serviços':'Categorias de produtos'} label={chosen?'Salvar categoria':'Criar categoria'} pending={action.pending} submit={event=>{event.preventDefault();void action.perform(()=>api(chosen?`${path}/${chosen}`:path,{method:chosen?'PUT':'POST',body:{name,type}})).then(ok=>{if(ok){setChosen('');setName('');}});}}>
     <Notice loading={rows.loading} error={rows.error}/><label>Categoria existente<select value={chosen} onChange={event=>{setChosen(event.target.value);setName(rows.data?.find(item=>item.id===event.target.value)?.name??'');}}><option value="">Nova categoria</option>{rows.data?.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-    <label>Nome da categoria<input value={name} onChange={event=>setName(event.target.value)} required minLength={2} maxLength={80}/></label>
-    {chosen&&<button type="button" className="botao perigo voltar-edicao" disabled={action.pending} onClick={()=>void action.perform(()=>api(`${path}/${chosen}`,{method:'DELETE'}),'Categoria removida dos serviços.').then(ok=>{if(ok){setChosen('');setName('');}})}>Remover categoria</button>}
+    <label>Nome da categoria<input value={name} onChange={event=>setName(event.target.value)} required minLength={2} maxLength={100}/></label>
+    {chosen&&<button type="button" className="botao perigo voltar-edicao" disabled={action.pending} onClick={()=>void action.perform(()=>api(`${path}/${chosen}?type=${type}`,{method:'DELETE'}),'Categoria removida.').then(ok=>{if(ok){setChosen('');setName('');}})}>Remover categoria</button>}
     <Result error={action.error} success={action.success}/>
   </FormPanel>;
 }
@@ -115,7 +121,7 @@ function EditProfessional({ url, media,commissions,person, services, done, close
 function StaffAccess({url,person,done}:{url:string;person:Professional;done:()=>void}){
   const action=useAction();
   return <FormPanel title={`Acesso de ${person.name}`} pending={action.pending} label="Salvar acesso" submit={event=>{event.preventDefault();const data=new FormData(event.currentTarget);void action.perform(()=>api(url,{method:'PUT',body:{phone:data.get('phone'),password:data.get('password')||undefined}})).then(ok=>{if(ok)done();});}}>
-    <label>Telefone da equipe<input name="phone" type="tel" required defaultValue={person.staff_phone??''}/></label><label>{person.staff_phone?'Nova senha (opcional)':'Senha inicial'}<input type="password" name="password" minLength={8} maxLength={72} required={!person.staff_phone} autoComplete="new-password"/></label>
+    <label>Telefone da equipe<input name="phone" type="tel" required defaultValue={person.staff_phone??''}/></label><label>{person.staff_phone?'Nova senha (opcional)':'Senha inicial'}<PasswordInput name="password" minLength={8} maxLength={72} required={!person.staff_phone} autoComplete="new-password"/></label>
     {person.staff_phone&&<button className="botao perigo voltar-edicao" type="button" onClick={()=>void action.perform(()=>api(url,{method:'DELETE'})).then(ok=>{if(ok)done();})}>Revogar acesso</button>}
     <Result error={action.error} success={action.success}/>
   </FormPanel>;

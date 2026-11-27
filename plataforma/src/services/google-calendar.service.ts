@@ -62,7 +62,7 @@ export async function syncGoogleCalendar(delivery?:Delivery){
   SELECT j.*,a.professional_id,a.status,a.starts_at,a.ends_at,a.client_name,a.client_phone,a.total_cents,a.line_items,a.google_event_id,a.google_event_subject,
     p.google_refresh_token,p.google_subject,p.google_connection_id,t.timezone,
     (t.status='ATIVO' AND p.active AND p.deleted_at IS NULL
-      AND EXISTS (SELECT 1 FROM users u WHERE u.tenant_id=p.tenant_id AND u.professional_id=p.id AND u.role='STAFF' AND u.active)
+      AND EXISTS (SELECT 1 FROM users u WHERE u.tenant_id=p.tenant_id AND u.professional_id=p.id AND u.role IN ('STAFF','OWNER') AND u.active AND NOT u.platform_blocked)
       AND coalesce(t.feature_flags->>'enable_google_calendar',s.feature_flags->>'enable_google_calendar','false')='true') AS active
   FROM claimed j JOIN appointments a ON a.tenant_id=j.tenant_id AND a.id=j.appointment_id
   JOIN professionals p ON p.tenant_id=a.tenant_id AND p.id=a.professional_id

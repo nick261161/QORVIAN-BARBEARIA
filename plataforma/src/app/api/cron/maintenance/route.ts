@@ -19,5 +19,6 @@ export async function GET(request:NextRequest){
   const media=await drainMediaCleanup();
   await pool.query('DELETE FROM auth_rate_limits WHERE reset_at<now()');
   await pool.query('DELETE FROM google_oauth_states WHERE expires_at<now()');
+  await pool.query("DELETE FROM password_reset_tokens WHERE expires_at<now()-interval '1 day'");
   return Response.json({calendar,media},{headers:{'Cache-Control':'no-store'}});
 }

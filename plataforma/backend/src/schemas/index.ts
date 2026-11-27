@@ -24,19 +24,24 @@ const instagram = z.string().trim().max(300).refine(value => {
 }, 'Informe uma URL HTTPS do Instagram.');
 export const money = z.number().int().min(0).max(10000000);
 export const commission = z.number().int().min(0).max(10000);
-const catalog = z.strictObject({ name, description: plain(1000), category: plain(80), photo: imageUrl, price_cents: money, active: z.boolean() });
-export const service = catalog.extend({ duration_minutes: z.number().int().min(5).max(480), custom_commission_rate: commission.nullable().optional() });
-export const product = catalog.extend({ sku: plain(80).optional(), commission_rate: commission.nullable().optional(), stock_quantity: z.number().int().min(0).max(1000000).optional(), stock_expected: z.number().int().min(0).max(1000000).optional() });
+const catalog = z.strictObject({ name, description: plain(1000), category: plain(100).optional(),category_id:id.optional(),photo: imageUrl, price_cents: money, active: z.boolean() })
+  .refine(value=>Boolean(value.category_id)||value.category!==undefined,'Selecione uma categoria.');
+export const service = catalog.safeExtend({ duration_minutes: z.number().int().min(5).max(480), custom_commission_rate: commission.nullable().optional() });
+export const product = catalog.safeExtend({ sku: plain(80).optional(), commission_rate: commission.nullable().optional(), stock_quantity: z.number().int().min(0).max(1000000).optional(), stock_expected: z.number().int().min(0).max(1000000).optional() });
 export const professional = z.strictObject({ name, photo: imageUrl, active: z.boolean(), service_ids: z.array(id).max(200).refine(values => new Set(values).size === values.length),
   default_service_commission: commission.optional(), default_product_commission: commission.optional() });
 export const staffAccount = z.strictObject({ phone, password: password.optional() });
-export const category = z.strictObject({ name: plain(80, 2) });
+export const categoryType=z.enum(['PRODUCT','SERVICE']);
+export const category = z.strictObject({ name: plain(100, 2),type:categoryType.default('SERVICE') });
 export const site = z.strictObject({
   name, logo: imageUrl, primary: z.string().regex(/^#[a-f\d]{6}$/i), secondary: z.string().regex(/^#[a-f\d]{6}$/i), banner: imageUrl,
   headline: plain(120), bio: plain(1600), address: plain(240), whatsapp: z.union([z.literal(''), phone]), instagram,
   sections: z.strictObject({ about: z.boolean(), services: z.boolean(), products: z.boolean(), team: z.boolean(), hours: z.boolean() }),
   backgrounds: z.strictObject({ home: imageUrl, services: imageUrl, products: imageUrl, loyalty: imageUrl }).optional(), favicon: imageUrl.optional(),
-});
+  slides:z.array(imageUrl).max(6).optional(),address_full:plain(400).optional(),
+  latitude:z.number().min(-90).max(90).nullable().optional(),longitude:z.number().min(-180).max(180).nullable().optional(),
+  street_view_heading:z.number().min(0).max(360).optional(),
+}).refine(value=>(value.latitude==null)===(value.longitude==null),'Informe latitude e longitude juntas.');
 export const cancellationPolicy = z.strictObject({ cancellation_minutes: z.number().int().min(0).max(10080), slot_minutes: z.literal(30).optional() });
 export const siteDefaults = defaultSite;
 
@@ -80,4 +85,7 @@ export const loyaltyAdjustment = z.strictObject({ delta: z.number().int().min(-1
 const flags = z.strictObject(Object.fromEntries(Object.keys(defaults).map(key => [key, z.boolean().nullable().optional()])) as Record<keyof typeof defaults, z.ZodOptional<z.ZodNullable<z.ZodBoolean>>>);
 export const controls = z.strictObject({ feature_flags: flags, max_professionals: z.number().int().min(1).max(500).nullable().optional() });
 export const tenantControls = controls.extend({ status: z.enum(['ATIVO', 'SUSPENSO']).optional() });
-export const newTenant = z.strictObject({ slug, name, kind: z.enum(['BARBEARIA', 'SALAO', 'ESTETICA']), timezone, owner: registration });
+export const ownerEmail=z.email().max(254).transform(value=>value.trim().toLowerCase());
+export const newTenant = z.strictObject({ slug, name, kind: z.enum(['BARBEARIA', 'SALAO', 'ESTETICA']), timezone, owner: registration.extend({email:ownerEmail.optional()}) });
+export const recoverPhone=z.strictObject({phone,slug:slug.optional()});
+export const redeemPhoneCode=recoverPhone.extend({challenge:id,code:z.string().regex(/^\d{6}$/),password});

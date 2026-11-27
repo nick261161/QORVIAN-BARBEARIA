@@ -80,8 +80,10 @@ export async function queueRetiredMedia(db:Db,tenant:string,urls:string[]){
     AND NOT EXISTS (SELECT 1 FROM products p WHERE p.tenant_id=$1 AND p.deleted_at IS NULL AND p.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM services s WHERE s.tenant_id=$1 AND s.deleted_at IS NULL AND s.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM professionals p WHERE p.tenant_id=$1 AND p.deleted_at IS NULL AND p.photo='/media/'||m.image_key)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.tenant_id=$1 AND u.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id=$1 AND ('/media/'||m.image_key IN (t.site_settings->>'logo',t.site_settings->>'banner',t.site_settings->>'favicon')
-      OR EXISTS (SELECT 1 FROM jsonb_each_text(coalesce(t.site_settings->'backgrounds','{}')) AS b WHERE b.value='/media/'||m.image_key))) RETURNING id)
+      OR EXISTS (SELECT 1 FROM jsonb_each_text(coalesce(t.site_settings->'backgrounds','{}')) AS b WHERE b.value='/media/'||m.image_key)
+      OR coalesce(t.site_settings->'slides','[]') ? ('/media/'||m.image_key))) RETURNING id)
     INSERT INTO media_cleanup(asset_id) SELECT id FROM retired ON CONFLICT DO NOTHING`,[tenant,ids]);
 }
 
@@ -90,8 +92,10 @@ export async function sweepPendingMedia(){
     AND NOT EXISTS (SELECT 1 FROM products p WHERE p.tenant_id=m.tenant_id AND p.deleted_at IS NULL AND p.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM services s WHERE s.tenant_id=m.tenant_id AND s.deleted_at IS NULL AND s.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM professionals p WHERE p.tenant_id=m.tenant_id AND p.deleted_at IS NULL AND p.photo='/media/'||m.image_key)
+    AND NOT EXISTS (SELECT 1 FROM users u WHERE u.tenant_id=m.tenant_id AND u.photo='/media/'||m.image_key)
     AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id=m.tenant_id AND ('/media/'||m.image_key IN (t.site_settings->>'logo',t.site_settings->>'banner',t.site_settings->>'favicon')
-      OR EXISTS (SELECT 1 FROM jsonb_each_text(coalesce(t.site_settings->'backgrounds','{}')) AS b WHERE b.value='/media/'||m.image_key))) ORDER BY m.created_at LIMIT 24`)).rows;
+      OR EXISTS (SELECT 1 FROM jsonb_each_text(coalesce(t.site_settings->'backgrounds','{}')) AS b WHERE b.value='/media/'||m.image_key)
+      OR coalesce(t.site_settings->'slides','[]') ? ('/media/'||m.image_key))) ORDER BY m.created_at LIMIT 24`)).rows;
   for(const row of rows)await transaction(async db=>{await scopedTenant(db,row.tenant_id,true,true);await queueRetiredMedia(db,row.tenant_id,[urlFor(row.image_key)]);});
 }
 

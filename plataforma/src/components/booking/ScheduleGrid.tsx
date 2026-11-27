@@ -8,7 +8,7 @@ import { currency,dateTime,statusLabel,type Appointment,type DayRule,type Profes
 function minutes(time:string){const [h,m]=time.split(':').map(Number);return h*60+m;}
 const print=(minute:number)=>`${String(Math.floor(minute/60)).padStart(2,'0')}:${String(minute%60).padStart(2,'0')}`;
 
-export function ScheduleGrid({items,people,tenant,hours,day,actions}:{items:Appointment[];people:Professional[];tenant:Tenant;hours:DayRule[];day:string;actions:(item:Appointment)=>React.ReactNode}){
+export function ScheduleGrid({items,people,tenant,hours,day,actions,allowContact=true}:{items:Appointment[];people:Pick<Professional,'id'|'name'>[];tenant:Tenant;hours:DayRule[];day:string;actions:(item:Appointment)=>React.ReactNode;allowContact?:boolean}){
   const interval=tenant.slot_minutes;
   const scheduled=hours.find(rule=>rule.weekday===new Date(`${day}T12:00:00Z`).getUTCDay());
   const starts=items.map(item=>minutes(dateTime(item.starts_at,tenant.timezone,'time')));
@@ -22,7 +22,7 @@ export function ScheduleGrid({items,people,tenant,hours,day,actions}:{items:Appo
   return <div className="cronograma" tabIndex={0} aria-label="Agenda em grade por profissional"><table><thead><tr><th scope="col">Hora</th>{columns.map(person=><th scope="col" key={person.id}>{person.name}</th>)}</tr></thead><tbody>
     {Array.from({length:Math.max(1,(last-first)/interval)},(_,index)=>first+index*interval).map(time=><tr key={time}><th scope="row">{print(time)}</th>{columns.map(person=><td key={person.id}>
       {byTime.get(`${person.id}:${time}`)?.map(item=><article className="cronograma-card" key={item.id}><p><strong>{dateTime(item.starts_at,tenant.timezone,'time')}–{dateTime(item.ends_at,tenant.timezone,'time')}</strong> · {currency(item.total_cents)}</p>
-        <strong>{item.client_name}</strong>{item.client_phone&&<a href={`https://wa.me/${item.client_phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer">WhatsApp</a>}
+        <strong>{item.client_name}</strong>{allowContact&&item.client_phone&&<a href={`https://wa.me/${item.client_phone.replace(/\D/g,'')}`} target="_blank" rel="noreferrer">WhatsApp</a>}
         <p>{item.line_items.map(line=>line.name).join(' + ')}</p><div className="acoes"><span className="estado" data-status={item.status}>{statusLabel[item.status]}</span>{actions(item)}</div>
       </article>)}</td>)}</tr>)}
   </tbody></table></div>;

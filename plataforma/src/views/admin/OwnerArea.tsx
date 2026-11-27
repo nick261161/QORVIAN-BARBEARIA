@@ -13,11 +13,13 @@ import { AdminDashboardPage } from './AdminDashboardPage.js';
 import { AdminSchedulePage } from './AdminSchedulePage.js';
 import { AdminCommissionsPage } from './AdminCommissionsPage.js';
 import { AdminSidebar } from '../../components/layout/AdminSidebar.js';
+import {SupportNotice} from '@/components/layout/SupportNotice';
 import { Hours } from './AdminSettingsPage.js';
 import { SiteEditor } from './AdminCustomizePage.js';
 import { AccessForm, useSession } from '../../contexts/AuthContext.js';
 import { Brand, Notice, useAction, useFeatureFlags, usePageTitle } from '../../components/ui/index.js';
 import { ManageOrders } from './AdminCommerce.js';
+import {StaffProfile} from './StaffProfile';
 const FinancialReports=lazy(()=>import('./AdminReportsPage.js').then(module=>({default:module.FinancialReports})));
 
 const tabs = [
@@ -29,6 +31,7 @@ const tabs = [
   { path: 'clientes', label: 'Clientes', icon: UserRound }, { path: 'pedidos', label: 'Pedidos', icon: ShoppingBag },
   { path: 'fidelidade', label: 'Fidelidade', icon: Gift, flag:'enable_loyalty_club' },
   { path: 'comissoes', label: 'Comissões', icon: CircleDollarSign, flag:'enable_commissions' },
+  { path: 'meu-perfil', label: 'Meu perfil', icon: UserRound },
 ] as const satisfies readonly { path: string; label: string; icon: typeof Clock3; flag?: Feature }[];
 
 const canonical:Record<string,string>={profissionais:'equipe',horarios:'configuracoes',vitrine:'personalizar'};
@@ -51,11 +54,12 @@ export function OwnerArea({store,currentSection}:{store?:string;currentSection?:
   const data = business.data;
   if (!data) return <main className="largura pagina"><Notice loading={business.loading} error={business.error} />{session.impersonating && <button className="botao secundario" onClick={() => void action.perform(async () => { await api('/auth/exit-support', { method: 'POST' }); await reload(); navigate('/master'); })}>Encerrar suporte</button>}</main>;
   const path = store?'/admin':`/gestao/${slug}`;
-  const shown = tabs.filter(tab => !('flag' in tab) || enabled(tab.flag));
+  const shown = tabs.filter(tab => (!('flag' in tab) || enabled(tab.flag))&&(!session.impersonating||tab.path!=='meu-perfil'));
   const active = shown.find(tab => tab.path === section);
   return <div className="painel-app"><header className="topo-gestao"><div className="linha-topo largura-painel"><Brand title={data.tenant.name} url={path} logo={data.tenant.site.logo} />
     <div className="acoes"><Link className="botao secundario" to={`/loja/${slug}`}><Globe2 size={17} /> Vitrine</Link><button className="botao secundario quadrado" aria-label="Sair" onClick={() => { void action.perform(logout); }}><LogOut size={18} /></button></div></div></header>
-    {session.impersonating && <div className="aviso-suporte"><div className="largura-painel linha-topo"><span>Modo suporte · {session.name}</span><button className="botao secundario" disabled={action.pending} onClick={() => void action.perform(async () => { await api('/auth/exit-support', { method: 'POST' }); await reload(); navigate('/master'); })}>Encerrar suporte</button></div></div>}
+    <SupportNotice/>
+    {session.impersonating&&!session.read_only_support && <div className="aviso-suporte"><div className="largura-painel linha-topo"><span>Modo suporte · {session.name}</span><button className="botao secundario" disabled={action.pending} onClick={() => void action.perform(async () => { await api('/auth/exit-support', { method: 'POST' }); await reload(); navigate('/master'); })}>Encerrar suporte</button></div></div>}
     <div className="layout-painel largura-painel"><AdminSidebar path={path} tabs={store?shown.map(tab=>({...tab,path:canonical[tab.path]??tab.path})):shown}/>
       <main className="conteudo-painel" key={section}><div className="cabecalho-pagina"><p className="suave">Gestão do estabelecimento</p><h1>{active?.label ?? 'Seção indisponível'}</h1></div>
         <Notice error={action.error || business.error} />
@@ -67,6 +71,7 @@ export function OwnerArea({store,currentSection}:{store?:string;currentSection?:
           section==='pedidos'?<ManageOrders base={base} tenant={data.tenant} commission={data.flags.enable_commissions}/>:
           section==='fidelidade'?<AdminLoyaltyPage base={base} business={data}/>:
           section==='comissoes'?<AdminCommissionsPage base={base} tenant={data.tenant}/>:
+          section==='meu-perfil'?<StaffProfile base={base} template={data.confirmation_message_template}/>:
           section==='agenda'?<AdminSchedulePage base={base} business={data}/>:<AdminDashboardPage base={base} business={data}/>}
       </main></div></div>;
 }

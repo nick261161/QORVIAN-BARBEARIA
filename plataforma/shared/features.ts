@@ -42,9 +42,11 @@ export type Site = {
   logo: string; primary: string; secondary: string; banner: string; headline: string; bio: string;
   address: string; whatsapp: string; instagram: string; sections: Record<typeof sections[number], boolean>;
   backgrounds: Record<typeof backgrounds[number], string>; favicon: string;
+  slides:string[];address_full:string;latitude:number|null;longitude:number|null;street_view_heading:number;
 };
 export const defaultSite: Site = {
   logo: '', primary: '#17231c', secondary: '#d6ed99', banner: '', headline: '', bio: '', address: '', whatsapp: '', instagram: '',
   sections: { about: true, services: true, products: true, team: true, hours: true },
   backgrounds: { home: '', services: '', products: '', loyalty: '' }, favicon: '',
+  slides:[],address_full:'',latitude:null,longitude:null,street_view_heading:0,
 };

@@ -21,7 +21,7 @@ export function PublicNavbar({ tenant,flags,loyalty }: { tenant: Tenant;flags:Fl
       {flags.enable_loyalty_club && loyalty && <Link to={`${root}/fidelidade`}>Fidelidade</Link>}</nav>
     <div className="acoes">
       {flags.enable_products_store&&flags.enable_shopping_cart && <Link to={`${root}/carrinho`} className="botao contorno-claro" aria-label={`Carrinho, ${cart?.units??0} itens`}><ShoppingBag size={17}/><span aria-live="polite">{cart?.units??0}</span></Link>}
-      <Link className="botao contorno-claro" to={same && session.role === 'OWNER' ? `/gestao/${tenant.slug}` : same && session.role==='STAFF' ? `/equipe/${tenant.slug}` : `${root}/${same?'conta':'entrar'}`}>{same ? session.role === 'OWNER' ? 'Gestão' : session.role==='STAFF'?'Minha agenda':'Minha conta' : 'Entrar'}</Link>
+      <Link className="botao contorno-claro" to={tenant.slug==='navalha-e-cia'?'/login':`${root}/entrar`}>Entrar</Link>
       {same && <button className="botao contorno-claro quadrado" aria-label="Sair" type="button" onClick={() => { void logout().catch(failure => setError(message(failure))); }}><LogOut size={17} /></button>}
     </div>
   </div>{error && <p className="largura erro" role="alert">{error}</p>}</header>;

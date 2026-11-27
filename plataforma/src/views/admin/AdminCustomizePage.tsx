@@ -36,6 +36,21 @@ export function SiteEditor({ base, tenant, refresh }: { base: string; tenant: Te
     <fieldset><legend>Imagens da marca</legend><div className="form-colunas">{([['logo','Logotipo'],['favicon','Ícone da aba'],['banner','Capa padrão']] as const).map(([key,label])=><MediaField key={key} endpoint={`${base}/media`} profile={key==='banner'?'banner':'catalog'} label={label} value={draft.site[key]} onChange={value=>update({[key]:value})}/>)}</div></fieldset>
     <fieldset><legend>Fundos em tela inteira</legend><div className="form-colunas">{backgrounds.map(key=><MediaField key={key} endpoint={`${base}/media`} profile="banner" label={labels[key]} value={draft.site.backgrounds[key]}
       onChange={value=>update({backgrounds:{...draft.site.backgrounds,[key]:value}})}/>)}</div></fieldset>
+    <fieldset><legend>Fotos do carrossel</legend><div className="formulario">
+      {[...draft.site.slides,...(draft.site.slides.length<6?['']:[])].map((value,index)=><div key={index} className="formulario">
+        <MediaField endpoint={`${base}/media`} profile="banner" label={`Foto ${index+1}`} value={value}
+          onChange={photo=>{const slides=[...draft.site.slides];slides[index]=photo;update({slides});}}/>
+        {index<draft.site.slides.length&&<button type="button" className="botao secundario" onClick={()=>update({slides:draft.site.slides.filter((_,i)=>i!==index)})}>Remover foto {index+1}</button>}
+      </div>)}
+    </div></fieldset>
+    <fieldset><legend>Localização no Google Maps</legend><div className="formulario">
+      <label>Endereço completo<input value={draft.site.address_full} maxLength={400} onChange={event=>update({address_full:event.target.value})}/></label>
+      <div className="form-colunas">{(['latitude','longitude'] as const).map(key=><label key={key}>{key==='latitude'?'Latitude':'Longitude'}
+        <input type="number" step="any" min={key==='latitude'?-90:-180} max={key==='latitude'?90:180} value={draft.site[key]??''}
+          onChange={event=>update({[key]:event.target.value===''?null:event.target.valueAsNumber})}/></label>)}</div>
+      <label>Direção da fachada (graus)<input type="number" min={0} max={360} step="any" value={draft.site.street_view_heading}
+        onChange={event=>update({street_view_heading:event.target.value===''?0:event.target.valueAsNumber})}/></label>
+    </div></fieldset>
     <label>Descrição<textarea rows={4} maxLength={1600} value={draft.site.bio} onChange={event => update({ bio: event.target.value })} /></label>
     <div className="form-colunas"><label>Cor principal<input type="color" value={draft.site.primary} onChange={event => update({ primary: event.target.value })} /></label><label>Cor de destaque<input type="color" value={draft.site.secondary} onChange={event => update({ secondary: event.target.value })} /></label></div>
     <fieldset><legend>Seções da vitrine</legend><div className="acoes">{sections.map(key => <label className="checkbox" key={key}><input type="checkbox" checked={draft.site.sections[key]} onChange={event => update({ sections: { ...draft.site.sections, [key]: event.target.checked } })} /> {sectionNames[key]}</label>)}</div></fieldset>
